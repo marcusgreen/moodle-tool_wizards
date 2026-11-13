@@ -1,0 +1,78 @@
+{
+    "format": "tool_wizards/wizard@1",
+    "key": "qpractice",
+    "target": {
+        "type": "module",
+        "modname": "qpractice"
+    },
+    "title": "Practice quiz",
+    "description": "Create a practice quiz where students can try questions as many times as they like.",
+    "screens": [
+        {
+            "key": "basics",
+            "title": "Basics",
+            "items": [
+                {
+                    "key": "name",
+                    "kind": "text",
+                    "label": "Name",
+                    "required": true,
+                    "sets": {
+                        "field": "name"
+                    }
+                },
+                {
+                    "key": "intro",
+                    "kind": "editor",
+                    "label": "Description",
+                    "sets": {
+                        "field": "introeditor"
+                    }
+                }
+            ]
+        },
+        {
+            "key": "settings",
+            "title": "Settings",
+            "items": [
+                {
+                    "key": "attempts",
+                    "kind": "number",
+                    "label": "Attempts",
+                    "help": "0 means unlimited.",
+                    "min": 0,
+                    "default": 0,
+                    "sets": {
+                        "field": "attempts",
+                        "as": "int"
+                    }
+                },
+                {
+                    "key": "grade",
+                    "kind": "number",
+                    "label": "Grade",
+                    "min": 0,
+                    "max": 100,
+                    "default": 100,
+                    "sets": {
+                        "field": "grade",
+                        "as": "int"
+                    }
+                },
+                {
+                    "kind": "hint",
+                    "text": "Add questions to this practice quiz after it is created."
+                }
+            ]
+        },
+        {
+            "use": "shared:visibility"
+        },
+        {
+            "use": "shared:groups"
+        },
+        {
+            "use": "shared:completion"
+        }
+    ]
+}
