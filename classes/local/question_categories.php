@@ -30,7 +30,7 @@ class question_categories {
      * @param \context $context the bank's context (a question bank's or a quiz's module context)
      * @param bool $withtop whether to include the bank's top category (where new top-level categories go;
      *                      questions cannot go there)
-     * @return array of ['id' => int, 'name' => string (the path, plain text), 'depth' => int]
+     * @return array of ['id' => int, 'name' => string (the path, formatted but not escaped), 'depth' => int]
      */
     public static function tree(\context $context, bool $withtop = false): array {
         global $CFG, $DB;
