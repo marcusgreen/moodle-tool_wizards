@@ -1061,6 +1061,7 @@ $string['preview_nothing'] = 'Nothing would be set: everything keeps its default
 $string['preview_notice'] = 'Trying the wizard: nothing will be created.';
 $string['preview_result'] = 'This is what the wizard would set; everything else keeps its default:';
 $string['preview_title'] = 'Try it';
+$string['privacy:metadata:core_ai'] = 'When a wizard manager uses "Improve with AI", the wizard definition and their instruction are sent to the AI subsystem, which records the request and the response.';
 $string['privacy:metadata:preference:hidesuggestions'] = 'Whether the user has chosen not to see wizard suggestions.';
 $string['privacy:metadata:preference:trycourse'] = 'The course a wizard manager last chose for trying wizards.';
 $string['privacy:metadata:tool_wizards_dismissed'] = 'Courses where the user chose to hide the first-content suggestions.';

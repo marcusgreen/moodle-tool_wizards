@@ -39,6 +39,7 @@ use core_privacy\local\request\writer;
  * the "don't show me wizard suggestions" preference, the courses where the user
  * hid the first-content suggestions, and messages queued for the user (for example
  * "you've unlocked Quiz"). Both tables are stored against the user's own context.
+ * Requests made with "Improve with AI" are kept by the AI subsystem (core_ai).
  *
  * @copyright  2026 Adam Jenkins <adam@wisecat.net>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -71,6 +72,10 @@ class provider implements
 
         $collection->add_user_preference('tool_wizards_hidesuggestions', 'privacy:metadata:preference:hidesuggestions');
         $collection->add_user_preference('tool_wizards_trycourse', 'privacy:metadata:preference:trycourse');
+
+        // The "Improve with AI" feature sends the wizard definition and the manager's instruction to the
+        // AI subsystem, which records the request and its response against the user.
+        $collection->add_subsystem_link('core_ai', [], 'privacy:metadata:core_ai');
 
         return $collection;
     }

@@ -3,6 +3,14 @@
 All notable changes to this plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Privacy
+
+- The privacy provider declares the link to the AI subsystem (`core_ai`): "Improve with AI" sends
+  the wizard definition and the manager's instruction to it, and it records the request and the
+  response against the user.
+
 ## [0.3.3] - 2026-10-29
 
 Fixes for the MDL Shield review of 0.3.2 (grade B+, 2026-10-29).
