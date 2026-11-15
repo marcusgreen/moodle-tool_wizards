@@ -46,7 +46,7 @@ class qbank_question extends content {
      * @return array
      */
     public static function fields(): array {
-        return question_creator::FIELDS + [
+        return question_creator::fields() + [
             'category' => 'the id of a category of this question bank (optional; the bank\'s default category)',
         ];
     }

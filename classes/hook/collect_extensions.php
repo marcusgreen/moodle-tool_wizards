@@ -25,14 +25,20 @@ namespace tool_wizards\hook;
  * - A transform turns several answers into form fields in code (the picture wizard's
  *   "picture, description and caption into a text and media area" is one). Its class
  *   extends \tool_wizards\local\wizard\transform.
+ * - A content handler is what an in-activity wizard adds to an existing activity (a quiz question,
+ *   a glossary entry). Its class extends \tool_wizards\local\wizard\content.
+ * - A question type handler lets the question wizards add questions of that type, by turning the
+ *   wizard's fields into the type's own editing form fields. Its class extends
+ *   \tool_wizards\local\wizard\qtype.
  *
- * Names are "<component>/<name>", for example "local_myplugin/send_welcome".
+ * Names are "<component>/<name>", for example "local_myplugin/send_welcome"; a question type
+ * handler is named by its question type, for example "gapfill" for qtype_gapfill.
  *
  * @package    tool_wizards
  * @copyright  2026 Adam Jenkins <adam@wisecat.net>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-#[\core\attribute\label('Add actions and transforms that wizard definitions can use.')]
+#[\core\attribute\label('Add actions, transforms, content handlers and question types that wizard definitions can use.')]
 #[\core\attribute\tags('tool_wizards')]
 final class collect_extensions {
     /** @var array name => action class */
@@ -43,6 +49,9 @@ final class collect_extensions {
 
     /** @var array name => content handler class */
     protected array $contents = [];
+
+    /** @var array question type => question type handler class */
+    protected array $qtypes = [];
 
     /**
      * Add an action.
@@ -84,6 +93,35 @@ final class collect_extensions {
         } else {
             debugging("tool_wizards: ignored content handler $name ($classname)", DEBUG_DEVELOPER);
         }
+    }
+
+    /**
+     * Add a question type handler, so the question wizards can add questions of that type.
+     *
+     * A type added again replaces the earlier handler, so a plugin can also improve how a
+     * built-in type is handled.
+     *
+     * @param string $qtype the question type, for example "gapfill" for qtype_gapfill
+     * @param string $classname a subclass of \tool_wizards\local\wizard\qtype
+     */
+    public function add_qtype(string $qtype, string $classname): void {
+        if (
+            preg_match('/^[a-z][a-z0-9_]*$/', $qtype)
+                && is_subclass_of($classname, \tool_wizards\local\wizard\qtype::class)
+        ) {
+            $this->qtypes[$qtype] = $classname;
+        } else {
+            debugging("tool_wizards: ignored question type $qtype ($classname)", DEBUG_DEVELOPER);
+        }
+    }
+
+    /**
+     * The question type handlers added.
+     *
+     * @return array question type => class
+     */
+    public function get_qtypes(): array {
+        return $this->qtypes;
     }
 
     /**

@@ -17,6 +17,8 @@
 namespace tool_wizards\local;
 
 use core_question\local\bank\question_edit_contexts;
+use tool_wizards\local\wizard\extensions;
+use tool_wizards\local\wizard\qtype;
 
 /**
  * Creates questions the way the question bank's "Create a new question" does, in a quiz's own
@@ -29,8 +31,10 @@ use core_question\local\bank\question_edit_contexts;
  * newly created question.
  *
  * The in-activity question wizards describe a question with a few simple fields
- * ({@see self::FIELDS}); {@see self::form_fields()} turns them into the type's own form fields
- * and {@see self::check_fields()} checks them first.
+ * ({@see self::fields()}); {@see self::form_fields()} turns them into the type's own form fields
+ * and {@see self::check_fields()} checks them first. The fields every question has are handled
+ * here; those of each question type by its handler ({@see qtype}), this plugin's own or one
+ * another plugin adds through \tool_wizards\hook\collect_extensions.
  *
  * Adapted from Moodle core question/bank/editquestion/question.php and mod/quiz/edit.php.
  *
@@ -42,45 +46,27 @@ class question_creator {
     /** @var string[] The question types the quiz mini-wizard can add. */
     const QTYPES = ['multichoice', 'truefalse'];
 
-    /** @var string[] The question types the in-activity question wizards can add. */
+    /**
+     * @var string[] The question types this plugin's own handlers cover. Other plugins may add more:
+     *     {@see self::wizard_qtypes()} lists them all.
+     */
     const WIZARD_QTYPES = ['multichoice', 'truefalse', 'shortanswer', 'numerical', 'match', 'essay', 'description'];
-
-    /** @var string[] How students may answer an essay: wizard value => the essay's response format. */
-    const RESPONSE_FORMATS = ['editor' => 'editor', 'plain' => 'plain', 'file' => 'noinline'];
 
     /** @var int The most numbered answer slots a wizard question has. */
     const MAXSLOTS = 10;
 
     /**
-     * @var array The simple fields of the question wizards, for the content handlers' fields().
+     * @var array The simple fields every question has, for the content handlers' fields(). Each
+     *     question type's handler adds its own ({@see self::fields()}).
      */
     const FIELDS = [
-        'qtype' => 'question type: multichoice, truefalse, shortanswer, numerical, match, essay or description',
-        'single' => 'multiple choice: 1 one right answer, 0 several right answers',
+        'qtype' => 'question type',
         'name' => 'name in the question bank (optional; the start of the question text when empty)',
         'questiontext' => 'the question, or for a description the text students read (editor, or plain text)',
-        'choice' => 'multiple choice: the answers to choose from, choice[1] to choice[10] (plain text)',
-        'rightchoice' => 'multiple choice with one right answer: the number of the right choice',
-        'right' => 'multiple choice with several right answers: right[n] = 1 when choice[n] is right',
-        'correctanswer' => 'true/false: 1 when the statement is true, 0 when false',
-        'accept' => 'short answer: the answers accepted as right, accept[1] to accept[10] (* matches anything)',
-        'casesensitive' => 'short answer: 1 when capital letters must match',
-        'number' => 'numerical: the right number',
-        'tolerance' => 'numerical: also accept numbers this far either side of it (default 0)',
-        'item' => 'matching: the items students match, item[1] to item[10]',
-        'match' => 'matching: what each item matches, match[1] to match[10]; a match without an item is an extra wrong answer',
-        'responseformat' => 'essay: editor (text with formatting), plain (plain text) or file (upload a file)',
-        'responselines' => 'essay: the height of the answer box in lines (2, 3, 5, 10, ... 40)',
-        'maxwords' => 'essay: the most words students may write (0 or empty: no limit)',
-        'graderinfo' => 'essay: notes for whoever marks it (plain text)',
         'feedbackright' => 'feedback for a right answer (plain text, optional)',
         'feedbackwrong' => 'feedback for a wrong answer (plain text, optional)',
         'mark' => 'the marks the question is worth (default 1; not for a description)',
     ];
-
-    /** @var array Number of right (or wrong) answers => each one's share of the marks, as the form offers it. */
-    const SHARES = [1 => '1.0', 2 => '0.5', 3 => '0.3333333', 4 => '0.25', 5 => '0.2', 6 => '0.1666667',
-        7 => '0.1428571', 8 => '0.125', 9 => '0.1111111', 10 => '0.1'];
 
     /**
      * Whether the current user can add a first question of this type to the quiz.
@@ -100,6 +86,16 @@ class question_creator {
     }
 
     /**
+     * The question types the wizards have a handler for: this plugin's own, then those other
+     * plugins add.
+     *
+     * @return string[]
+     */
+    public static function wizard_qtypes(): array {
+        return array_keys(extensions::qtypes());
+    }
+
+    /**
      * The question types the wizards can add that the site has switched on.
      *
      * @return string[]
@@ -107,7 +103,32 @@ class question_creator {
     public static function enabled_qtypes(): array {
         global $CFG;
         require_once($CFG->libdir . '/questionlib.php');
-        return array_values(array_filter(self::WIZARD_QTYPES, fn($qtype) => \question_bank::qtype_enabled($qtype)));
+        return array_values(array_filter(self::wizard_qtypes(), fn($qtype) => \question_bank::qtype_enabled($qtype)));
+    }
+
+    /**
+     * The handler of a question type the wizards can add, if the site has it switched on.
+     *
+     * @param string $qtype the question type
+     * @return string|null the handler class, a subclass of {@see qtype}
+     */
+    public static function handler(string $qtype): ?string {
+        return in_array($qtype, self::enabled_qtypes(), true) ? extensions::qtypes()[$qtype] : null;
+    }
+
+    /**
+     * The simple fields of the question wizards: those every question has, then those of each
+     * question type the wizards have a handler for.
+     *
+     * @return array field => description
+     */
+    public static function fields(): array {
+        $fields = self::FIELDS;
+        $fields['qtype'] = 'question type: ' . implode(', ', self::wizard_qtypes());
+        foreach (extensions::qtypes() as $class) {
+            $fields += $class::fields();
+        }
+        return $fields;
     }
 
     /**
@@ -126,7 +147,7 @@ class question_creator {
      * Create the question and add it to the quiz.
      *
      * @param \cm_info $cm the quiz
-     * @param string $qtype one of {@see self::WIZARD_QTYPES}
+     * @param string $qtype one of {@see self::wizard_qtypes()}
      * @param array $answers submitted field => value for the question type's own form
      * @param int $page the quiz page to add it to (0: the last page, as the quiz does by default)
      * @return \stdClass the saved question
@@ -139,8 +160,7 @@ class question_creator {
 
         $context = \core\context\module::instance($cm->id);
         if (
-            !in_array($qtype, self::WIZARD_QTYPES, true) || !\question_bank::qtype_enabled($qtype)
-                || !has_all_capabilities(['mod/quiz:manage', 'moodle/question:add'], $context)
+            !self::handler($qtype) || !has_all_capabilities(['mod/quiz:manage', 'moodle/question:add'], $context)
         ) {
             throw new \moodle_exception('error_noquestion', 'tool_wizards');
         }
@@ -165,7 +185,7 @@ class question_creator {
      * Create the question in a shared question bank.
      *
      * @param \cm_info $cm the question bank (mod_qbank)
-     * @param string $qtype one of {@see self::WIZARD_QTYPES}
+     * @param string $qtype one of {@see self::wizard_qtypes()}
      * @param array $answers submitted field => value for the question type's own form
      * @param int $categoryid a category of this bank, or 0 for its default category
      * @return \stdClass the saved question
@@ -176,8 +196,7 @@ class question_creator {
         require_once($CFG->libdir . '/questionlib.php');
         $context = \core\context\module::instance($cm->id);
         if (
-            !in_array($qtype, self::WIZARD_QTYPES, true) || !\question_bank::qtype_enabled($qtype)
-                || !has_capability('moodle/question:add', $context)
+            !self::handler($qtype) || !has_capability('moodle/question:add', $context)
         ) {
             throw new \moodle_exception('error_noquestion', 'tool_wizards');
         }
@@ -306,7 +325,7 @@ class question_creator {
     /**
      * The question type of the wizard's fields.
      *
-     * @param array $fields the wizard's fields ({@see self::FIELDS})
+     * @param array $fields the wizard's fields ({@see self::fields()})
      * @return string
      */
     public static function qtype_of(array $fields): string {
@@ -316,221 +335,53 @@ class question_creator {
     /**
      * Check the wizard's fields before anything is saved.
      *
-     * @param array $fields the wizard's fields ({@see self::FIELDS})
+     * @param array $fields the wizard's fields ({@see self::fields()})
      * @return array field => error message
      */
     public static function check_fields(array $fields): array {
-        $qtype = self::qtype_of($fields);
-        if (!in_array($qtype, self::enabled_qtypes(), true)) {
+        $handler = self::handler(self::qtype_of($fields));
+        if (!$handler) {
             return ['qtype' => get_string('error_noquestion', 'tool_wizards')];
         }
         $errors = [];
         if (!self::editor_value($fields['questiontext'] ?? '')) {
             $errors['questiontext'] = get_string(
-                $qtype === 'description' ? 'question_error_text' : 'error_questiontext',
+                $handler::graded() ? 'error_questiontext' : 'question_error_text',
                 'tool_wizards'
             );
         }
-        if ($qtype !== 'description' && !self::is_blank($fields['mark'] ?? '')) {
-            $mark = self::number($fields['mark']);
+        if ($handler::graded() && !qtype::is_blank($fields['mark'] ?? '')) {
+            $mark = qtype::number($fields['mark']);
             if ($mark === null || $mark < 0) {
                 $errors['mark'] = get_string('question_error_mark', 'tool_wizards');
             }
         }
-        switch ($qtype) {
-            case 'multichoice':
-                $choices = self::slots($fields['choice'] ?? []);
-                $rights = self::right_choices($fields);
-                if (count($choices) < 2) {
-                    $errors['choice'] = get_string('error_twochoices', 'tool_wizards');
-                } else if (array_diff($rights, array_keys($choices))) {
-                    $errors[self::is_single($fields) ? 'rightchoice' : 'right'] = get_string('error_correctchoice', 'tool_wizards');
-                } else if (!$rights) {
-                    $errors[self::is_single($fields) ? 'rightchoice' : 'right'] =
-                        get_string('question_error_noright', 'tool_wizards');
-                }
-                break;
-            case 'shortanswer':
-                if (!self::slots($fields['accept'] ?? [])) {
-                    $errors['accept'] = get_string('question_error_noaccept', 'tool_wizards');
-                }
-                break;
-            case 'numerical':
-                if (self::is_blank($fields['number'] ?? '') || self::number($fields['number']) === null) {
-                    $errors['number'] = get_string('question_error_number', 'tool_wizards');
-                }
-                if (!self::is_blank($fields['tolerance'] ?? '')) {
-                    $tolerance = self::number($fields['tolerance']);
-                    if ($tolerance === null || $tolerance < 0) {
-                        $errors['tolerance'] = get_string('question_error_tolerance', 'tool_wizards');
-                    }
-                }
-                break;
-            case 'match':
-                $items = self::slots($fields['item'] ?? []);
-                $matches = self::slots($fields['match'] ?? []);
-                if (array_diff_key($items, $matches)) {
-                    $errors['match'] = get_string('question_error_matchmissing', 'tool_wizards');
-                } else if (count($items) < 2) {
-                    $errors['item'] = get_string('question_error_twopairs', 'tool_wizards');
-                } else if (count($matches) < 3) {
-                    $errors['match'] = get_string('question_error_threematches', 'tool_wizards');
-                }
-                break;
-            case 'essay':
-                $format = $fields['responseformat'] ?? 'editor';
-                if (!is_string($format) || !isset(self::RESPONSE_FORMATS[$format])) {
-                    $errors['responseformat'] = get_string('question_error_responseformat', 'tool_wizards');
-                }
-                if (!self::is_blank($fields['maxwords'] ?? '')) {
-                    $words = self::number($fields['maxwords']);
-                    if ($words === null || $words < 0 || $words != (int) $words) {
-                        $errors['maxwords'] = get_string('question_error_maxwords', 'tool_wizards');
-                    }
-                }
-                break;
-        }
-        return $errors;
+        return $errors + $handler::check($fields);
     }
 
     /**
      * The question type's own form fields for the wizard's fields, as a teacher would fill in
      * that form. Fields the wizard does not set keep the form's defaults.
      *
-     * @param array $fields the wizard's fields ({@see self::FIELDS}), already checked
+     * @param array $fields the wizard's fields ({@see self::fields()}), already checked
      * @return array form field => value, nested like $_POST
      */
     public static function form_fields(array $fields): array {
         global $CFG;
         require_once($CFG->libdir . '/questionlib.php');
-        $qtype = self::qtype_of($fields);
+        $handler = self::handler(self::qtype_of($fields));
+        if (!$handler) {
+            throw new \moodle_exception('error_noquestion', 'tool_wizards');
+        }
         $text = self::editor_value($fields['questiontext'] ?? '') ?? ['text' => '', 'format' => FORMAT_HTML];
         $form = ['name' => self::name_for($fields, $text), 'questiontext' => $text];
-        if ($qtype !== 'description') {
+        if ($handler::graded()) {
             // Always say: the question form would otherwise start from the mark this teacher last used.
-            $form['defaultmark'] = self::is_blank($fields['mark'] ?? '') ? '1' : self::number_string($fields['mark']);
+            $form['defaultmark'] = qtype::is_blank($fields['mark'] ?? '') ? '1' : qtype::number_string($fields['mark']);
         }
         $right = self::editor_value($fields['feedbackright'] ?? '');
         $wrong = self::editor_value($fields['feedbackwrong'] ?? '');
-
-        switch ($qtype) {
-            case 'multichoice':
-                // As qtype_multichoice_edit_form: one right answer gets 100%; with several, the right
-                // ones share 100% and the wrong ones share -100%, so ticking everything scores nothing.
-                $single = self::is_single($fields);
-                $choices = self::slots($fields['choice'] ?? []);
-                $rights = array_values(array_intersect(self::right_choices($fields), array_keys($choices)));
-                $nright = count($rights);
-                $nwrong = count($choices) - $nright;
-                $form['single'] = $single ? '1' : '0';
-                $slot = 0;
-                foreach ($choices as $n => $choice) {
-                    $form['answer'][$slot] = ['text' => s($choice), 'format' => FORMAT_HTML];
-                    if (in_array($n, $rights, true)) {
-                        $form['fraction'][$slot] = $single ? '1.0' : self::SHARES[$nright];
-                    } else {
-                        $form['fraction'][$slot] = $single || !$nwrong ? '0.0' : '-' . self::SHARES[$nwrong];
-                    }
-                    $slot++;
-                }
-                $form['noanswers'] = (string) max(5, QUESTION_NUMANS_START, $slot);
-                self::combined_feedback($form, $right, $wrong);
-                break;
-
-            case 'truefalse':
-                $true = (int) ($fields['correctanswer'] ?? 1) === 1;
-                $form['correctanswer'] = $true ? '1' : '0';
-                if ($right) {
-                    $form[$true ? 'feedbacktrue' : 'feedbackfalse'] = $right;
-                }
-                if ($wrong) {
-                    $form[$true ? 'feedbackfalse' : 'feedbacktrue'] = $wrong;
-                }
-                break;
-
-            case 'shortanswer':
-                $slot = 0;
-                foreach (self::slots($fields['accept'] ?? []) as $accept) {
-                    $form['answer'][$slot] = $accept;
-                    $form['fraction'][$slot] = '1.0';
-                    if ($right) {
-                        $form['feedback'][$slot] = $right;
-                    }
-                    $slot++;
-                }
-                if ($wrong) {
-                    // A last answer "*" matches anything else: the usual way to give feedback for wrong answers.
-                    $form['answer'][$slot] = '*';
-                    $form['fraction'][$slot] = '0.0';
-                    $form['feedback'][$slot] = $wrong;
-                    $slot++;
-                }
-                $form['usecase'] = empty($fields['casesensitive']) ? '0' : '1';
-                $form['noanswers'] = (string) max(QUESTION_NUMANS_START, $slot);
-                break;
-
-            case 'numerical':
-                \question_bank::get_qtype('numerical');
-                $form['answer'][0] = self::number_string($fields['number'] ?? '');
-                $form['tolerance'][0] = self::is_blank($fields['tolerance'] ?? '') ? '0'
-                    : self::number_string($fields['tolerance']);
-                $form['fraction'][0] = '1.0';
-                if ($right) {
-                    $form['feedback'][0] = $right;
-                }
-                if ($wrong) {
-                    $form['answer'][1] = '*';
-                    $form['tolerance'][1] = '0';
-                    $form['fraction'][1] = '0.0';
-                    $form['feedback'][1] = $wrong;
-                }
-                // No units (the form's default may be a teacher's saved preference).
-                $form['unitrole'] = (string) \qtype_numerical::UNITNONE;
-                break;
-
-            case 'match':
-                $items = self::slots($fields['item'] ?? []);
-                $slot = 0;
-                // The pairs first, then the extra answers that match no item.
-                foreach ([true, false] as $paired) {
-                    foreach (self::slots($fields['match'] ?? []) as $n => $match) {
-                        if (isset($items[$n]) !== $paired) {
-                            continue;
-                        }
-                        $form['subquestions'][$slot] = ['text' => $paired ? s($items[$n]) : '', 'format' => FORMAT_HTML];
-                        $form['subanswers'][$slot] = $match;
-                        $slot++;
-                    }
-                }
-                $form['noanswers'] = (string) max(QUESTION_NUMANS_START, $slot);
-                self::combined_feedback($form, $right, $wrong);
-                break;
-
-            case 'essay':
-                $format = self::RESPONSE_FORMATS[$fields['responseformat'] ?? 'editor'] ?? 'editor';
-                $form['responseformat'] = $format;
-                if ($format === 'noinline') {
-                    // Students upload one file; the essay form requires it to be required.
-                    $form['attachments'] = '1';
-                    $form['attachmentsrequired'] = '1';
-                } else {
-                    $form['responserequired'] = '1';
-                    if (!self::is_blank($fields['responselines'] ?? '')) {
-                        $form['responsefieldlines'] = (string) (int) $fields['responselines'];
-                    }
-                    $words = (int) self::number($fields['maxwords'] ?? '');
-                    if ($words > 0) {
-                        $form['maxwordenabled'] = '1';
-                        $form['maxwordlimit'] = (string) $words;
-                    }
-                }
-                $graderinfo = self::editor_value($fields['graderinfo'] ?? '');
-                if ($graderinfo) {
-                    $form['graderinfo'] = $graderinfo;
-                }
-                break;
-        }
-        return $form;
+        return $form + $handler::form_fields($fields, $right, $wrong);
     }
 
     /**
@@ -548,74 +399,11 @@ class question_creator {
         }
         if ($name === '') {
             $qtype = self::qtype_of($fields);
-            $name = in_array($qtype, self::WIZARD_QTYPES, true) ? get_string('pluginname', 'qtype_' . $qtype)
+            $name = isset(extensions::qtypes()[$qtype]) && \question_bank::qtype_exists($qtype)
+                ? get_string('pluginname', 'qtype_' . $qtype)
                 : get_string('question_defaultname', 'tool_wizards');
         }
         return \core_text::substr($name, 0, 255);
-    }
-
-    /**
-     * Set the combined feedback for a right and a wrong answer, keeping the form's defaults otherwise.
-     *
-     * @param array $form the form fields, changed in place
-     * @param array|null $right feedback for a right answer
-     * @param array|null $wrong feedback for a wrong answer
-     */
-    protected static function combined_feedback(array &$form, ?array $right, ?array $wrong): void {
-        if ($right) {
-            $form['correctfeedback'] = $right;
-        }
-        if ($wrong) {
-            $form['incorrectfeedback'] = $wrong;
-        }
-    }
-
-    /**
-     * Whether a multiple-choice question has one right answer (the default).
-     *
-     * @param array $fields the wizard's fields
-     * @return bool
-     */
-    protected static function is_single(array $fields): bool {
-        return (int) ($fields['single'] ?? 1) === 1;
-    }
-
-    /**
-     * The numbers of the right choices of a multiple-choice question.
-     *
-     * @param array $fields the wizard's fields
-     * @return int[]
-     */
-    protected static function right_choices(array $fields): array {
-        if (self::is_single($fields)) {
-            $n = (int) ($fields['rightchoice'] ?? 0);
-            return $n > 0 ? [$n] : [];
-        }
-        $out = [];
-        foreach ((array) ($fields['right'] ?? []) as $n => $on) {
-            if (!empty($on)) {
-                $out[] = (int) $n;
-            }
-        }
-        sort($out);
-        return $out;
-    }
-
-    /**
-     * The filled-in numbered slots of a field (choice[1], choice[2], ...), in order.
-     *
-     * @param mixed $value the field's value
-     * @return array slot number => trimmed text
-     */
-    protected static function slots($value): array {
-        $out = [];
-        foreach (is_array($value) ? $value : [] as $n => $text) {
-            if (is_scalar($text) && trim((string) $text) !== '' && (int) $n >= 1 && (int) $n <= self::MAXSLOTS) {
-                $out[(int) $n] = trim((string) $text);
-            }
-        }
-        ksort($out);
-        return $out;
     }
 
     /**
@@ -642,43 +430,5 @@ class question_creator {
             return null;
         }
         return ['text' => '<p>' . nl2br(s($text), false) . '</p>', 'format' => FORMAT_HTML];
-    }
-
-    /**
-     * Whether a value is empty.
-     *
-     * @param mixed $value the value
-     * @return bool
-     */
-    protected static function is_blank($value): bool {
-        return $value === null || (is_string($value) && trim($value) === '');
-    }
-
-    /**
-     * A number from a field (a number, or a string in the user's or the plain format).
-     *
-     * @param mixed $value the value
-     * @return float|null null when it is not a number
-     */
-    protected static function number($value): ?float {
-        if (is_int($value) || is_float($value)) {
-            return (float) $value;
-        }
-        if (!is_string($value) || trim($value) === '') {
-            return null;
-        }
-        $number = unformat_float(trim($value), true);
-        return $number === false || $number === null ? null : (float) $number;
-    }
-
-    /**
-     * A number as the question forms take it.
-     *
-     * @param mixed $value the value
-     * @return string
-     */
-    protected static function number_string($value): string {
-        $number = self::number($value);
-        return $number === null ? (is_scalar($value) ? trim((string) $value) : '') : format_float($number, -1, false, true);
     }
 }

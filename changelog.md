@@ -5,6 +5,12 @@ All notable changes to this plugin are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Other plugins can add question types to the question wizards through the `collect_extensions`
+  hook (`add_qtype()`), with a handler extending `\tool_wizards\local\wizard\qtype`. The built-in
+  question types now use the same handlers.
+
 ### Privacy
 
 - The privacy provider declares the link to the AI subsystem (`core_ai`): "Improve with AI" sends

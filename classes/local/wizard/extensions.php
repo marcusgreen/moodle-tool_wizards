@@ -19,8 +19,8 @@ namespace tool_wizards\local\wizard;
 use tool_wizards\hook\collect_extensions;
 
 /**
- * The actions and transforms definitions can use: this plugin's own, plus those other
- * plugins add through \tool_wizards\hook\collect_extensions.
+ * The actions, transforms, content handlers and question types definitions can use: this
+ * plugin's own, plus those other plugins add through \tool_wizards\hook\collect_extensions.
  *
  * @package    tool_wizards
  * @copyright  2026 Adam Jenkins <adam@wisecat.net>
@@ -44,6 +44,17 @@ class extensions {
         'workshop_phase' => content\workshop_phase::class,
     ];
 
+    /** @var array The plugin's own question type handlers: question type => class. */
+    const BUILTIN_QTYPES = [
+        'multichoice' => qtype\multichoice::class,
+        'truefalse' => qtype\truefalse::class,
+        'shortanswer' => qtype\shortanswer::class,
+        'numerical' => qtype\numerical::class,
+        'match' => qtype\matching::class,
+        'essay' => qtype\essay::class,
+        'description' => qtype\description::class,
+    ];
+
     /** @var collect_extensions|null the hook, once dispatched in this request */
     protected static ?collect_extensions $hook = null;
 
@@ -59,6 +70,9 @@ class extensions {
             $hook->add_transform('tool_wizards/picture_label', transform\picture_label::class);
             foreach (self::BUILTIN_CONTENTS as $name => $class) {
                 $hook->add_content('tool_wizards/' . $name, $class);
+            }
+            foreach (self::BUILTIN_QTYPES as $qtype => $class) {
+                $hook->add_qtype($qtype, $class);
             }
             \core\di::get(\core\hook\manager::class)->dispatch($hook);
             self::$hook = $hook;
@@ -91,6 +105,15 @@ class extensions {
      */
     public static function contents(): array {
         return self::hook()->get_contents();
+    }
+
+    /**
+     * The question type handlers, whether or not the site has the question type.
+     *
+     * @return array question type => class
+     */
+    public static function qtypes(): array {
+        return self::hook()->get_qtypes();
     }
 
     /**

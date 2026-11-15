@@ -170,8 +170,36 @@ checked before import with:
 ### Extending
 
 Other plugins can add building blocks that definitions use: **actions**, which run after a wizard
-has created its course or activity, and **transforms**, which turn several answers into settings.
-Register them through the `\tool_wizards\hook\collect_extensions` hook.
+has created its course or activity, **transforms**, which turn several answers into settings,
+**content handlers**, for what in-activity wizards add, and **question types**, which the question
+wizards can then add to a quiz or question bank. Register them through the
+`\tool_wizards\hook\collect_extensions` hook.
+
+A question type handler extends `\tool_wizards\local\wizard\qtype`. It names the fields of its own
+type (`fields()`), checks them (`check()`), and turns them into the type's own editing form fields
+(`form_fields()`). The name, question text, mark and feedback every question has are handled for
+it, and the question is saved by the type's own editing form, as for the built-in types:
+
+```php
+// local/myplugin/db/hooks.php
+$callbacks = [
+    [
+        'hook' => \tool_wizards\hook\collect_extensions::class,
+        'callback' => [\local_myplugin\hook_callbacks::class, 'wizard_extensions'],
+    ],
+];
+
+// local/myplugin/classes/hook_callbacks.php
+public static function wizard_extensions(\tool_wizards\hook\collect_extensions $hook): void {
+    $hook->add_qtype('gapfill', \local_myplugin\wizard\gapfill::class);
+}
+```
+
+The question type is offered only where the site has it installed and switched on. Its fields can
+then be set by the question wizards' definitions (`"sets": {"field": "..."}`), and a choice for it
+added with `"when": {"offered": {"field": "qtype", "value": "gapfill"}}`. Adding a type the plugin
+already handles replaces the built-in handler. The quiz wizard's "add a first question" step still
+offers only multiple choice and true/false.
 
 ## Settings
 

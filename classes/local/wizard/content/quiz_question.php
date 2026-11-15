@@ -47,7 +47,7 @@ class quiz_question extends content {
      * @return array
      */
     public static function fields(): array {
-        return question_creator::FIELDS + [
+        return question_creator::fields() + [
             'page' => 'where it goes: end (after the last question) or new (on a new page at the end)',
         ];
     }
